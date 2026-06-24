@@ -1,0 +1,4 @@
+# Placeholder so the directory ships under version control and
+# `COPY --from=builder /app/public ./public` in web/Dockerfile finds
+# a target. Replace with real static assets (favicon.ico, og-image.png,
+# etc.) as the frontend grows.

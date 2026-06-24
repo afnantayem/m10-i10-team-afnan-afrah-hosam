@@ -1,0 +1,33 @@
+# Integration 10 — four-service stack.
+#
+# TODO (Infra-Integration lead): author this file.
+#
+# Required services: api, web, neo4j, weaviate.
+#
+# Per the Evaluation Methodology in integration-task-spec.md:
+# - Every service declares a healthcheck.
+# - `api.depends_on` includes both `neo4j` and `weaviate` with
+#   `condition: service_healthy`.
+# - `web.depends_on` includes `api` with `condition: service_healthy`.
+# - api build: long-form `context: .` + `dockerfile: api/Dockerfile`
+#   (NOT `build: ./api` — see reading Section 11; api container runs
+#   `uvicorn api.main:app` and needs repo-root context so package-
+#   relative imports resolve).
+# - api env: NEO4J_URI=bolt://neo4j:7687, WEAVIATE_URL=http://weaviate:8080,
+#           WEB_ORIGIN=${WEB_ORIGIN}.
+# - web NEXT_PUBLIC_API_URL=http://localhost:8000 must be a BUILD ARG
+#   (under `services.web.build.args`), not a runtime `environment:` entry.
+#   Next.js bakes NEXT_PUBLIC_* into the client bundle at build time; a
+#   runtime env var runs in the container but never reaches the browser.
+# - neo4j: image neo4j:5-community; NEO4J_dbms_memory_heap_max__size=1G,
+#          NEO4J_dbms_memory_pagecache_size=512M; named volume neo4j_data
+#          mounted at /data; healthcheck via cypher-shell.
+# - weaviate: image semitechnologies/weaviate:1.24.10; named volume
+#             weaviate_data mounted at /var/lib/weaviate;
+#             DEFAULT_VECTORIZER_MODULE=none; healthcheck via
+#             /v1/.well-known/ready.
+# - volumes block declares named neo4j_data and weaviate_data.
+
+services: {}
+
+volumes: {}

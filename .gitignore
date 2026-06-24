@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+.env.local
+.pytest_cache/
+node_modules/
+.next/
+neo4j_data/
+weaviate_data/

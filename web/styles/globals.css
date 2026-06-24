@@ -1,0 +1,6 @@
+html, body { font-family: system-ui, sans-serif; padding: 1.5rem; max-width: 720px; }
+input, textarea { width: 100%; padding: 0.5rem; margin: 0.5rem 0; }
+button { padding: 0.5rem 1rem; }
+table { border-collapse: collapse; width: 100%; }
+th, td { border: 1px solid #ddd; padding: 0.5rem; text-align: left; }
+.entity-span { background: #ffd; padding: 0 0.2rem; border-radius: 3px; }
