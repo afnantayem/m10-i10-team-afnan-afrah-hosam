@@ -5,13 +5,19 @@ Mirrors `web/lib/types.ts` field-for-field — `chunk_id` not `chunkId`,
 Next.js frontend.
 
 Constraints below are the source of truth for the autograder's 422 gates.
+
+Contract: every shape change must be announced on the team Slack channel
+BEFORE the change lands. The Frontend lead must update lib/types.ts in the
+same review cycle. Silent renames are the most common integration failure.
 """
 from typing import List, Literal
 
 from pydantic import BaseModel, Field
 
 
-# --- /extract --------------------------------------------------------
+# ---------------------------------------------------------------------------
+# /extract
+# ---------------------------------------------------------------------------
 
 class ExtractRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=5000)
@@ -20,15 +26,17 @@ class ExtractRequest(BaseModel):
 class Entity(BaseModel):
     text: str
     label: str
-    start: int
-    end: int
+    start: int  # character offset — do NOT rename to start_char
+    end: int    # character offset — do NOT rename to end_char
 
 
 class ExtractResponse(BaseModel):
     entities: List[Entity]
 
 
-# --- /kg/query -------------------------------------------------------
+# ---------------------------------------------------------------------------
+# /kg/query
+# ---------------------------------------------------------------------------
 
 class KGRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=500)
@@ -45,7 +53,9 @@ class UnsupportedQueryDetail(BaseModel):
     supported_patterns: List[str]
 
 
-# --- /rag/answer -----------------------------------------------------
+# ---------------------------------------------------------------------------
+# /rag/answer
+# ---------------------------------------------------------------------------
 
 class RAGRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=500)
@@ -53,7 +63,7 @@ class RAGRequest(BaseModel):
 
 
 class Citation(BaseModel):
-    chunk_id: int
+    chunk_id: int   # snake_case — mirrors TypeScript interface field `chunk_id`
     score: float
 
 
@@ -63,7 +73,9 @@ class RAGResponse(BaseModel):
     confidence: float
 
 
-# --- Health / readiness ---------------------------------------------
+# ---------------------------------------------------------------------------
+# Health / readiness
+# ---------------------------------------------------------------------------
 
 class HealthResponse(BaseModel):
     status: str
