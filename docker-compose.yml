@@ -28,6 +28,128 @@
 #             /v1/.well-known/ready.
 # - volumes block declares named neo4j_data and weaviate_data.
 
-services: {}
+services:
 
-volumes: {}
+  # ── Data tier ────────────────────────────────────────────────────────────────
+
+  neo4j:
+    image: neo4j:5-community
+    ports:
+      - "7687:7687"
+      - "7474:7474"
+    environment:
+      # NEO4J_AUTH is the ONLY Neo4j credential var that belongs here.
+      # The neo4j:5-community image treats every NEO4J_* key as a config
+      # namespace — adding NEO4J_USER or NEO4J_PASSWORD here breaks startup.
+      NEO4J_AUTH: "neo4j/${NEO4J_PASSWORD}"
+      NEO4J_dbms_memory_heap_max__size: "1G"
+      NEO4J_dbms_memory_pagecache_size: "512M"
+    volumes:
+      - neo4j_data:/data
+    healthcheck:
+      # Single $ — Compose interpolates NEO4J_USER/NEO4J_PASSWORD from the
+      # host .env at parse time. Double $$ would defer to the container shell
+      # where those vars are not exported, causing silent auth failure.
+      test: ["CMD-SHELL", "cypher-shell -u ${NEO4J_USER} -p ${NEO4J_PASSWORD} 'RETURN 1'"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  weaviate:
+    image: semitechnologies/weaviate:1.24.10
+    ports:
+      - "8080:8080"
+    environment:
+      QUERY_DEFAULTS_LIMIT: "20"
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
+      PERSISTENCE_DATA_PATH: "/var/lib/weaviate"
+      # Must be "none" — we embed externally with sentence-transformers.
+      # Leaving this unset causes Weaviate to attempt internal vectorization,
+      # which conflicts with our pre-built vectors and silently drops inserts.
+      DEFAULT_VECTORIZER_MODULE: "none"
+    volumes:
+      - weaviate_data:/var/lib/weaviate
+    healthcheck:
+      # The semitechnologies/weaviate image ships wget, not curl.
+      # A curl-based healthcheck fails silently and the service never reaches
+      # healthy, blocking the api depends_on chain indefinitely.
+      test: ["CMD-SHELL", "wget --spider --tries=1 http://localhost:8080/v1/.well-known/ready"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  # ── Application tier ─────────────────────────────────────────────────────────
+
+  api:
+    build:
+      # MUST be repo root, NOT ./api. The api package uses package-relative
+      # imports and its Dockerfile runs `uvicorn api.main:app` from /app.
+      # Using `build: ./api` makes the build succeed but the container crashes
+      # with ModuleNotFoundError: No module named 'api' at startup.
+      context: .
+      dockerfile: api/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      # Compose service-name DNS — never localhost inside the container.
+      NEO4J_URI: "bolt://neo4j:7687"
+      WEAVIATE_URL: "http://weaviate:8080"
+      # NEO4J_USER and NEO4J_PASSWORD come from the host .env; Compose
+      # interpolates them here for the Bolt driver connection.
+      NEO4J_USER: "${NEO4J_USER}"
+      NEO4J_PASSWORD: "${NEO4J_PASSWORD}"
+      # Browser-facing origin for CORS — must be localhost, not the Compose
+      # service name. The browser cannot resolve `web` as a hostname.
+      WEB_ORIGIN: "${WEB_ORIGIN}"
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      weaviate:
+        condition: service_healthy
+    healthcheck:
+      # python:3.11-slim does not ship curl or wget — use Python stdlib urllib.
+      # /readyz (not /healthz) performs a deeper dependency check (Neo4j +
+      # Weaviate + model loaded). start_period covers a cold HuggingFace cache
+      # that downloads spaCy + flan-t5-base on first boot (~4 min).
+      test: ["CMD", "python", "-c",
+             "import urllib.request, sys; urllib.request.urlopen('http://localhost:8000/readyz'); sys.exit(0)"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 180s
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      args:
+        # NEXT_PUBLIC_* values are baked into the client bundle at build time.
+        # This MUST be the host-facing URL (localhost) — the browser cannot
+        # resolve the Compose service name `api`. Setting this as a runtime
+        # `environment:` entry has no effect; the bundle already shipped.
+        NEXT_PUBLIC_API_URL: "http://localhost:8000"
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      # node:20-slim ships neither curl nor wget — use Node stdlib http.
+      # The CI workflow's Phase 3 wait requires web to report healthy; without
+      # this declaration, web stays "running" forever and the workflow times out.
+      test: ["CMD", "node", "-e",
+             "require('http').get('http://localhost:3000', r => process.exit(r.statusCode < 500 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+# ── Named volumes ─────────────────────────────────────────────────────────────
+# Declaring here makes volumes explicit and survives `docker compose down`
+# without -v. Use `docker compose down -v` to wipe state for a clean rerun.
+
+volumes:
+  neo4j_data:
+  weaviate_data:
